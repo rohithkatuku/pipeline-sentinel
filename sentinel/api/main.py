@@ -1,6 +1,8 @@
 """FastAPI application — Pipeline Sentinel API."""
 
-from fastapi import FastAPI, HTTPException
+import os
+
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
@@ -25,6 +27,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def require_api_key(x_api_key: str = Header(default=None)):
+    """Guard for state-changing / paid-LLM routes. Requires SENTINEL_API_KEY to be set."""
+    expected = os.getenv("SENTINEL_API_KEY")
+    if not expected or x_api_key != expected:
+        raise HTTPException(401, "Missing or invalid X-API-Key")
+
 
 # Initialize DB on startup
 @app.on_event("startup")
@@ -75,7 +85,7 @@ class AnomalyCheckRequest(BaseModel):
 
 # --- Pipeline Endpoints ---
 
-@app.post("/pipelines", tags=["Pipelines"])
+@app.post("/pipelines", tags=["Pipelines"], dependencies=[Depends(require_api_key)])
 async def create_pipeline(p: PipelineCreate):
     try:
         db.create_pipeline(p.id, p.name, p.source, p.destination, p.schedule, p.metadata)
@@ -99,7 +109,7 @@ async def get_pipeline(pipeline_id: str):
 
 # --- Run Endpoints ---
 
-@app.post("/runs", tags=["Runs"])
+@app.post("/runs", tags=["Runs"], dependencies=[Depends(require_api_key)])
 async def record_run(run: RunRecord):
     run_id = db.record_run(**run.model_dump())
     return {"status": "recorded", "run_id": run_id}
@@ -112,7 +122,7 @@ async def get_runs(pipeline_id: str, limit: int = 50):
 
 # --- Anomaly Detection ---
 
-@app.post("/detect/anomaly", tags=["Detection"])
+@app.post("/detect/anomaly", tags=["Detection"], dependencies=[Depends(require_api_key)])
 async def check_anomaly(req: AnomalyCheckRequest):
     """Run anomaly detection on a pipeline's latest metrics."""
     runs = db.get_recent_runs(req.pipeline_id, 50)
@@ -167,7 +177,7 @@ async def check_anomaly(req: AnomalyCheckRequest):
 
 # --- Root Cause Analysis ---
 
-@app.post("/analyze/{anomaly_id}", tags=["Analysis"])
+@app.post("/analyze/{anomaly_id}", tags=["Analysis"], dependencies=[Depends(require_api_key)])
 async def analyze_anomaly(anomaly_id: int):
     """Run LLM root cause analysis on a detected anomaly."""
     anomaly = db.get_anomaly(anomaly_id)
@@ -213,7 +223,7 @@ async def analyze_anomaly(anomaly_id: int):
 
 # --- Schema Drift ---
 
-@app.post("/schema/check", tags=["Schema"])
+@app.post("/schema/check", tags=["Schema"], dependencies=[Depends(require_api_key)])
 async def check_schema(snapshot: SchemaSnapshot):
     """Compare current schema against last known schema."""
     previous = db.get_latest_schema(snapshot.pipeline_id)
@@ -248,7 +258,7 @@ async def check_schema(snapshot: SchemaSnapshot):
 
 # --- Lineage ---
 
-@app.post("/lineage/edge", tags=["Lineage"])
+@app.post("/lineage/edge", tags=["Lineage"], dependencies=[Depends(require_api_key)])
 async def add_edge(edge: LineageEdge):
     db.add_lineage_edge(edge.source, edge.target, edge.relationship)
     return {"status": "added"}
