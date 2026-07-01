@@ -65,13 +65,18 @@ class LineageTracker:
 
         downstream = self.get_downstream(pipeline_id)
 
-        # Find all paths to affected nodes
+        # Find paths to affected nodes (bounded — all_simple_paths is exponential
+        # on densely cross-linked DAGs, so cap depth and total paths collected)
         paths = []
         max_depth = 0
         for target in downstream:
-            for path in nx.all_simple_paths(self.graph, pipeline_id, target):
+            for path in nx.all_simple_paths(self.graph, pipeline_id, target, cutoff=10):
                 paths.append(path)
                 max_depth = max(max_depth, len(path) - 1)
+                if len(paths) >= 100:
+                    break
+            if len(paths) >= 100:
+                break
 
         # Severity based on blast radius
         count = len(downstream)
