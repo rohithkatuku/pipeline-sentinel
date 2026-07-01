@@ -170,8 +170,7 @@ async def check_anomaly(req: AnomalyCheckRequest):
 @app.post("/analyze/{anomaly_id}", tags=["Analysis"])
 async def analyze_anomaly(anomaly_id: int):
     """Run LLM root cause analysis on a detected anomaly."""
-    anomalies = db.get_anomalies()
-    anomaly = next((a for a in anomalies if a["id"] == anomaly_id), None)
+    anomaly = db.get_anomaly(anomaly_id)
 
     if not anomaly:
         raise HTTPException(404, f"Anomaly {anomaly_id} not found")

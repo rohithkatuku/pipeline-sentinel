@@ -191,6 +191,12 @@ def get_anomalies(pipeline_id: str = None, resolved: bool = None,
         return [dict(r) for r in rows]
 
 
+def get_anomaly(anomaly_id: int) -> dict | None:
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM anomalies WHERE id = ?", (anomaly_id,)).fetchone()
+        return dict(row) if row else None
+
+
 def resolve_anomaly(anomaly_id: int, root_cause: str = None, remediation: str = None):
     with get_connection() as conn:
         conn.execute(
